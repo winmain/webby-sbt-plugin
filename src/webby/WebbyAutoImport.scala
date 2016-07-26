@@ -251,7 +251,13 @@ abstract class WebbyAutoImport {
     * Запустить scala класс кодогенерации в отдельном процессе
     */
   def runScala(classPath: Seq[File], className: String, arguments: Seq[String] = Nil) {
-    val ret: Int = new Fork("java", Some(className)).apply(ForkOptions(bootJars = classPath, outputStrategy = Some(StdoutOutput)), arguments)
+    val ret: Int = new Fork("java", Some(className)).apply(
+      // здесь мы не используем параметр bootJars, потому что он добавляет jar'ки через -Xbootclasspath/a,
+      // а это чревато тем, что getClass.getClassLoader == null для всех классов
+      ForkOptions(
+        runJVMOptions = Seq("-cp", classPath.mkString(":")),
+        outputStrategy = Some(StdoutOutput)),
+      arguments)
     if (ret != 0) sys.error("Execution " + className + " ends with error")
   }
 
