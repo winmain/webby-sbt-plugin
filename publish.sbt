@@ -1,6 +1,6 @@
 name := "webby-sbt-plugin"
 organization := "com.github.citrum.webby"
-version := "0.1.1"
+version := "0.1.2"
 
 description := "An SBT plugin for Webby - scala web framework"
 startYear := Some(2016)

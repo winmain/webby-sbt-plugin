@@ -94,6 +94,8 @@ abstract class WebbyAutoImport {
     *                  т.е. подключаем по исходникам. Если false - то подключаем как обычную либу.
     */
   case class RelativeProject(name: String, moduleId: ModuleID, projectId: String = null, useRef: Boolean = false) {
+    if (useRef) println("Using project reference for " + name + (if (projectId == null) "" else "/" + projectId))
+
     def projectFile: File = relativeProjectFile(name)
 
     val project: ProjectReference =
