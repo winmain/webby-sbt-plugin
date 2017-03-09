@@ -45,8 +45,9 @@ abstract class WebbyAutoImport {
     fork in Test := true,
 
     distExcludes := Nil,
-    webbyPackageEverythingTask,
-    webbyStageTask,
+    stagedResources := {},
+    packageEverythingTask,
+    stageTask,
     mainClass := Some("webby.core.server.NettyServer")
   )
 
@@ -145,8 +146,8 @@ abstract class WebbyAutoImport {
     * Оно может работать и без этого явно вызванного задания, но нестабильно. По непонятным причинам jenkins периодически
     * собирает неправильный артефакт, без скомилированных классов. Поэтому, я добавил сюда этот таск явно.
     */
-  val webbyPackageEverything = TaskKey[Seq[File]]("webby-package-everything")
-  lazy val webbyPackageEverythingTask = webbyPackageEverything := {
+  val packageEverything = TaskKey[Seq[File]]("package-everything")
+  lazy val packageEverythingTask = packageEverything := {
     import scala.collection.immutable.Seq
     val _ = stagedResources.value
     Def.taskDyn[Seq[File]] {
@@ -181,9 +182,9 @@ abstract class WebbyAutoImport {
     * Stage task создаёт папку target/staged, в которую складывает все jar-ки, необходимые для
     * запуска проекта на production.
     */
-  val webbyStage = TaskKey[Unit]("stage")
-  lazy val webbyStageTask = webbyStage := {
-    val packaged = webbyPackageEverything.value
+  val stage = TaskKey[Unit]("stage")
+  lazy val stageTask = stage := {
+    val packaged = packageEverything.value
     val dependencies = (dependencyClasspath in Runtime).value
     val targetValue = target.value
 
