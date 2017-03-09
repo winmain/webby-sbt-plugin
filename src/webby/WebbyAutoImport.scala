@@ -1,6 +1,6 @@
 package webby
 import sbt.Keys._
-import sbt.{File, Project, ProjectRef, ProjectReference, RootProject, _}
+import sbt._
 
 abstract class WebbyAutoImport {
   // ------------------------------- Project default settings -------------------------------
@@ -19,9 +19,7 @@ abstract class WebbyAutoImport {
     artifactName := ((sv: ScalaVersion, module: ModuleID, artifact: Artifact) =>
       "_project-" + artifact.name + artifact.classifier.fold("")("-" + _) + "." + artifact.extension), // Задать имя генерируемого артефакта с префиксом "_project-", чтобы подключить его первым
 
-    unmanagedResourceDirectories in Compile ++= Seq(
-      baseDirectory.value / "app",
-      target.value / "asset-resources"),
+    unmanagedResourceDirectories in Compile += baseDirectory.value / "app",
     excludeFilter in unmanagedResources := HiddenFileFilter || "*.scala" || "*.java",
 
     // Чтобы работал debug в idea для тестов
@@ -45,11 +43,14 @@ abstract class WebbyAutoImport {
     fork in Test := true,
 
     distExcludes := Nil,
-    stagedResources := {},
+    buildAssets := {},
+    assetResourcesTargetDirectory := target.value / "asset-resources",
+    artifactPath in packageAssets := crossTarget.value / "_project-asset-resources.jar",
+    packageAssetsTask,
     packageEverythingTask,
     stageTask,
     mainClass := Some("webby.core.server.NettyServer")
-  )
+  ) ++ addArtifact(Artifact("asset-resources"), packageAssets).settings
 
   // ------------------------------- Profile -------------------------------
 
@@ -114,10 +115,23 @@ abstract class WebbyAutoImport {
     def dependsAndAggregate(relativeProject: RelativeProject): Project = relativeProject.aggregate(relativeProject.dependsFor(proj))
   }
 
+  // ------------------------------- Assets -------------------------------
+
+  val buildAssets = taskKey[Unit]("Prepare and compile assets for `stage` task. Google closure advanced compiler usually runs here")
+  val assetResourcesTargetDirectory = taskKey[File]("A directory where assets compile to")
+
+  val packageAssets = taskKey[File]("Produces assets jar artifact")
+  lazy val packageAssetsTask = packageAssets := {
+    val _ = buildAssets.value
+    val sourceDir: File = (assetResourcesTargetDirectory in Compile).value
+    val outputZip = (artifactPath in packageAssets).value
+    sbt.IO.zip(Path.allSubpaths(sourceDir), outputZip)
+    outputZip
+  }
+
   // ------------------------------- Stage -------------------------------
 
   val distExcludes = SettingKey[Seq[String]]("dist-excludes")
-  val stagedResources = taskKey[Unit]("Prepare and compile resources for `stage` task. Google closure advanced compiler usually runs here")
 
   def inAllDependencies[T](base: ProjectRef, key: SettingKey[T], structure: BuildStructure): List[T] = {
     def deps(ref: ProjectRef): List[ProjectRef] =
@@ -149,7 +163,6 @@ abstract class WebbyAutoImport {
   val packageEverything = TaskKey[Seq[File]]("package-everything")
   lazy val packageEverythingTask = packageEverything := {
     import scala.collection.immutable.Seq
-    val _ = stagedResources.value
     Def.taskDyn[Seq[File]] {
       val project = thisProjectRef.value
       val excludes = distExcludes.value
