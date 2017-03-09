@@ -6,15 +6,15 @@ abstract class WebbyAutoImport {
   // ------------------------------- Project default settings -------------------------------
 
   lazy val webbyProjectSettings = Seq[Setting[_]](
-    sourceDirectory in Compile <<= baseDirectory(_ / "app"),
-    scalaSource in Compile <<= baseDirectory(_ / "app"),
-    javaSource in Compile <<= baseDirectory(_ / "app"),
+    sourceDirectory in Compile := baseDirectory.value / "app",
+    scalaSource in Compile := baseDirectory.value / "app",
+    javaSource in Compile := baseDirectory.value / "app",
 
-    sourceDirectory in Test <<= baseDirectory(_ / "test"),
-    scalaSource in Test <<= baseDirectory(_ / "test"),
-    javaSource in Test <<= baseDirectory(_ / "test"),
+    sourceDirectory in Test := baseDirectory.value / "test",
+    scalaSource in Test := baseDirectory.value / "test",
+    javaSource in Test := baseDirectory.value / "test",
 
-    resourceDirectory in Compile <<= baseDirectory(_ / "conf"),
+    resourceDirectory in Compile := baseDirectory.value / "conf",
 
     artifactName := ((sv: ScalaVersion, module: ModuleID, artifact: Artifact) =>
       "_project-" + artifact.name + artifact.classifier.fold("")("-" + _) + "." + artifact.extension), // Задать имя генерируемого артефакта с префиксом "_project-", чтобы подключить его первым
@@ -256,12 +256,12 @@ abstract class WebbyAutoImport {
     * Создать список настроек, задающих стандартные пути исходников, ресурсов, тестов для проекта.
     */
   def makeSourceDirs(): Seq[Setting[_]] = Seq(
-    sourceDirectories in Compile <+= baseDirectory(_ / "src"),
-    scalaSource in Compile <<= baseDirectory(_ / "src"),
-    javaSource in Compile <<= baseDirectory(_ / "src"),
-    resourceDirectory in Compile <<= baseDirectory(_ / "conf"),
-    scalaSource in Test <<= baseDirectory(_ / "test"),
-    resourceDirectory in Test <<= baseDirectory(_ / "test-conf"))
+    sourceDirectories in Compile += baseDirectory.value / "src",
+    scalaSource in Compile := baseDirectory.value / "src",
+    javaSource in Compile := baseDirectory.value / "src",
+    resourceDirectory in Compile := baseDirectory.value / "conf",
+    scalaSource in Test := baseDirectory.value / "test",
+    resourceDirectory in Test := baseDirectory.value / "test-conf")
 
   /**
     * Запустить scala класс кодогенерации в отдельном процессе
@@ -283,11 +283,11 @@ abstract class WebbyAutoImport {
     * Task: Компиляция, показывающая точное время компиляции
     */
   val comp = TaskKey[Unit]("comp")
-  lazy val compTask = comp <<=
-    (state in Compile) map {state =>
-      val t0 = System.currentTimeMillis()
-      Project.extract(state).runTask(compile in Compile, state)
-      val t1 = System.currentTimeMillis()
-      println(Colors.magenta("--- " + (t1 - t0) + " ms"))
-    }
+  lazy val compTask = comp := {
+    val st = (state in Compile).value
+    val t0 = System.currentTimeMillis()
+    Project.extract(st).runTask(compile in Compile, st)
+    val t1 = System.currentTimeMillis()
+    println(Colors.magenta("--- " + (t1 - t0) + " ms"))
+  }
 }
