@@ -116,14 +116,22 @@ abstract class WebbyAutoImport {
   // ------------------------------- Stage -------------------------------
 
   val distExcludes = SettingKey[Seq[String]]("dist-excludes")
+  val stagedResources = taskKey[Unit]("Prepare and compile resources for `stage` task. Google closure advanced compiler usually runs here")
 
-  def inAllDependencies[T](base: ProjectRef, key: SettingKey[T], structure: BuildStructure): Seq[T] = {
-    def deps(ref: ProjectRef): Seq[ProjectRef] =
+  def inAllDependencies[T](base: ProjectRef, key: SettingKey[T], structure: BuildStructure): List[T] = {
+    def deps(ref: ProjectRef): List[ProjectRef] =
       Project.getProject(ref, structure).toList.flatMap {p =>
         p.dependencies.map(_.project) ++ p.aggregate
       }
     Dag.topologicalSort(base)(deps).flatMap {p => key in p get structure.data}
   }
+
+  def sequence[T](tasks: Seq[Def.Initialize[Task[T]]], result: List[T] = Nil): Def.Initialize[Task[List[T]]] =
+    tasks match {
+      case Nil => Def.task {result}
+      case x :: xs => Def.taskDyn {val v = x.value; sequence(xs, v :: result)}
+    }
+
 
   /**
     * Executes the {{packaged-artifacts}} task in the current project (the project to which this setting is applied)
@@ -138,30 +146,36 @@ abstract class WebbyAutoImport {
     * собирает неправильный артефакт, без скомилированных классов. Поэтому, я добавил сюда этот таск явно.
     */
   val webbyPackageEverything = TaskKey[Seq[File]]("webby-package-everything")
-  lazy val webbyPackageEverythingTask = webbyPackageEverything <<=
-    (state, thisProjectRef, distExcludes).flatMap {(state, project, excludes) =>
+  lazy val webbyPackageEverythingTask = webbyPackageEverything := {
+    import scala.collection.immutable.Seq
+    val _ = stagedResources.value
+    Def.taskDyn[Seq[File]] {
+      val project = thisProjectRef.value
+      val excludes = distExcludes.value
+      val structure = Project.structure(state.value)
       def theTask[T](t: TaskKey[T]): SettingKey[Task[T]] = Scoped.scopedSetting(t.scope, t.key)
-      def taskInAllDependencies[T](taskKey: TaskKey[T]): Task[Seq[T]] =
-        inAllDependencies(project, theTask(taskKey), Project structure state).join
+      def taskInAllDependencies[T](taskKey: TaskKey[T]): Seq[Task[T]] = {
+        inAllDependencies(project, theTask(taskKey), structure)
+      }
+      def sequenceTaskInAllDeps[T](taskKey: TaskKey[T]): Def.Initialize[Task[List[T]]] = {
+        sequence(taskInAllDependencies[T](taskKey).map(v => Def.setting(v)))
+      }
 
-      taskInAllDependencies(packagedArtifacts).flatMap {packaged: Seq[Map[Artifact, File]] =>
-        taskInAllDependencies(packageSrc in Compile).flatMap {srcs: Seq[File] =>
-          taskInAllDependencies(packageDoc in Compile).map {docs: Seq[File] =>
-            val allJars: Seq[Iterable[File]] = for {
-              artifacts: Map[Artifact, File] <- packaged
-            } yield {
+      sequenceTaskInAllDeps(packagedArtifacts).flatMap {allJars =>
+        sequenceTaskInAllDeps(packageSrc in Compile).flatMap {srcs =>
+          sequenceTaskInAllDeps(packageDoc in Compile).map {docs =>
+            allJars.map {artifacts: Map[Artifact, File] =>
               artifacts
                 .filter {case (art, _) => art.extension == "jar" && !excludes.contains(art.name)}
                 .map {case (_, path) => path}
-            }
-            allJars
-              .flatten
-              .diff(srcs ++ docs) //remove srcs & docs since we do not need them in the dist
+            }.flatten
+              .diff(srcs ++ docs) // remove srcs & docs since we do not need them in the dist
               .distinct
-          }
-        }
+          }.evaluate(structure.data)
+        }.evaluate(structure.data)
       }
-    }
+    }.value
+  }
 
   /**
     * Stage task создаёт папку target/staged, в которую складывает все jar-ки, необходимые для
