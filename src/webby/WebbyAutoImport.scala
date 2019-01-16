@@ -1,6 +1,9 @@
 package webby
 import sbt.Keys._
 import sbt._
+import sbt.internal.BuildStructure
+
+import scala.sys.process.stringToProcess
 
 abstract class WebbyAutoImport {
   // ------------------------------- Project default settings -------------------------------
@@ -66,7 +69,7 @@ abstract class WebbyAutoImport {
 
   // ------------------------------- Relative projects -------------------------------
 
-  var relativeProjectFile: (String) => File = {projectName =>
+  var relativeProjectFile: String => File = {projectName =>
     file(System.getProperty("user.home") + "/ws/" + projectName)
   }
 
@@ -254,9 +257,10 @@ abstract class WebbyAutoImport {
   lazy val codegenRunnerTask = codegenRunner := {
     (compile in Compile).value // Run codegen compile task
     val classPath: Seq[File] =
-      (dependencyClasspath in Compile).value.files :+
-        (baseDirectory in Compile).value :+
-        (classDirectory in Runtime).value
+//      (dependencyClasspath in Compile).value.files :+
+//        (baseDirectory in Compile).value :+
+//        (classDirectory in Runtime).value
+      (fullClasspath in Runtime).value.map(_.data)
     new CodegenRunner(classPath)
   }
   class CodegenRunner(classPath: Seq[File]) {
@@ -286,9 +290,9 @@ abstract class WebbyAutoImport {
     val ret: Int = new Fork("java", Some(className)).apply(
       // здесь мы не используем параметр bootJars, потому что он добавляет jar'ки через -Xbootclasspath/a,
       // а это чревато тем, что getClass.getClassLoader == null для всех классов
-      ForkOptions(
-        runJVMOptions = Seq("-cp", classPath.mkString(":")) ++ runJVMOptions,
-        outputStrategy = Some(StdoutOutput)),
+      ForkOptions()
+        .withRunJVMOptions(Vector("-cp", classPath.mkString(":")) ++ runJVMOptions)
+        .withOutputStrategy(Some(StdoutOutput)),
       arguments)
     if (ret != 0) sys.error("Execution " + className + " ends with error")
   }
